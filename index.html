@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoCapn WASM Demo</title>
+    <style>
+        body { font-family: monospace; max-width: 800px; margin: 40px auto; background: #0a0a0a; color: #e0e0e0; }
+        h1 { color: #4ecdc4; } h2 { color: #ff6b6b; }
+        .panel { background: #1a1a2e; padding: 20px; border-radius: 8px; margin: 16px 0; }
+        label { display: inline-block; width: 120px; color: #a0a0a0; }
+        input { background: #16213e; color: #e0e0e0; border: 1px solid #4ecdc4; padding: 4px 8px; width: 100px; }
+        button { background: #4ecdc4; color: #0a0a0a; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #45b7aa; }
+        .result { color: #4ecdc4; font-size: 1.2em; margin: 8px 0; }
+        canvas { background: #16213e; border-radius: 4px; }
+        pre { background: #16213e; padding: 12px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>⚓ CoCapn WASM</h1>
+    <p>The same deadband, PID, and NMEA that runs on the ESP32 — now in your browser.</p>
+
+    <div class="panel">
+        <h2>Deadband Check</h2>
+        <label>Center</label><input id="db-center" value="100"><br>
+        <label>Tolerance %</label><input id="db-tol" value="5"><br>
+        <label>Value</label><input id="db-val" value="97"><br>
+        <button onclick="checkDeadband()">Check</button>
+        <div class="result" id="db-result"></div>
+    </div>
+
+    <div class="panel">
+        <h2>PID Heading Simulator</h2>
+        <label>Kp</label><input id="pid-kp" value="0.8">
+        <label>Ki</label><input id="pid-ki" value="0.1">
+        <label>Kd</label><input id="pid-kd" value="0.3"><br>
+        <label>Initial°</label><input id="pid-init" value="0">
+        <label>Target°</label><input id="pid-target" value="90"><br>
+        <button onclick="runSimulation()">Simulate</button>
+        <canvas id="pid-canvas" width="700" height="300"></canvas>
+    </div>
+
+    <div class="panel">
+        <h2>NMEA Parser</h2>
+        <input id="nmea-input" style="width:600px" value="$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47">
+        <button onclick="parseNMEA()">Parse</button>
+        <pre id="nmea-result"></pre>
+    </div>
+
+    <script type="module">
+        import init, { Deadband, PIDController, verify_nmea_checksum, parse_nmea_gga, simulate_heading_hold } from './pkg/cocapn_wasm.js';
+
+        async function load() {
+            await init();
+            window.checkDeadband = function() {
+                const center = parseFloat(document.getElementById('db-center').value);
+                const tol = parseFloat(document.getElementById('db-tol').value) / 100;
+                const val = parseFloat(document.getElementById('db-val').value);
+                const db = new Deadband(center, tol, 0);
+                const state = db.check(val);
+                const names = ['NORMAL ✅', 'APPROACHING ⚠️', 'EXCEEDED 🚨'];
+                document.getElementById('db-result').textContent = names[state];
+            };
+
+            window.runSimulation = function() {
+                const kp = parseFloat(document.getElementById('pid-kp').value);
+                const ki = parseFloat(document.getElementById('pid-ki').value);
+                const kd = parseFloat(document.getElementById('pid-kd').value);
+                const initial = parseFloat(document.getElementById('pid-init').value);
+                const target = parseFloat(document.getElementById('pid-target').value);
+                const data = simulate_heading_hold(kp, ki, kd, initial, target, 300);
+
+                const canvas = document.getElementById('pid-canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, 700, 300);
+
+                const headings = [];
+                for (let i = 0; i < data.length; i += 3) headings.push(data[i]);
+                const maxH = Math.max(...headings, target + 10);
+                const minH = Math.min(...headings, target - 10);
+                const range = maxH - minH || 1;
+
+                ctx.strokeStyle = '#4ecdc4';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                headings.forEach((h, i) => {
+                    const x = (i / headings.length) * 700;
+                    const y = 300 - ((h - minH) / range) * 280 - 10;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+
+                // Target line
+                const ty = 300 - ((target - minH) / range) * 280 - 10;
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, ty);
+                ctx.lineTo(700, ty);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillText(`Target: ${target}°`, 10, ty - 5);
+                ctx.fillStyle = '#4ecdc4';
+                ctx.fillText(`Steps: ${headings.length}`, 10, 20);
+            };
+
+            window.parseNMEA = function() {
+                const sentence = document.getElementById('nmea-input').value;
+                const valid = verify_nmea_checksum(sentence);
+                let output = `Checksum: ${valid ? '✅ Valid' : '❌ Invalid'}\n`;
+                if (valid) {
+                    const data = parse_nmea_gga(sentence);
+                    output += `Latitude:  ${data[0].toFixed(4)}°\n`;
+                    output += `Longitude: ${data[1].toFixed(4)}°\n`;
+                    output += `Fix:       ${data[2]}\n`;
+                    output += `Satellites: ${data[3]}\n`;
+                    output += `HDOP:      ${data[4]}\n`;
+                    output += `Altitude:  ${data[5]}m\n`;
+                }
+                document.getElementById('nmea-result').textContent = output;
+            };
+        }
+
+        load();
+    </script>
+</body>
+</html>
