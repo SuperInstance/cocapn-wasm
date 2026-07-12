@@ -155,6 +155,10 @@ pub fn verify_nmea_checksum(sentence: &str) -> bool {
 /// Returns [lat, lon, fix_quality, satellites, hdop, altitude] or throws
 #[wasm_bindgen]
 pub fn parse_nmea_gga(sentence: &str) -> Result<Vec<f64>, JsValue> {
+    if !verify_nmea_checksum(sentence) {
+        return Err(JsValue::from_str("NMEA checksum invalid"));
+    }
+
     let parts: Vec<&str> = sentence.split(',').collect();
     if parts.len() < 10 {
         return Err(JsValue::from_str("GGA sentence too short"));
@@ -164,6 +168,13 @@ pub fn parse_nmea_gga(sentence: &str) -> Result<Vec<f64>, JsValue> {
     let lat_dir = parts[3];
     let lon_raw = parts[4];
     let lon_dir = parts[5];
+
+    if lat_dir != "N" && lat_dir != "S" {
+        return Err(JsValue::from_str("Invalid latitude hemisphere"));
+    }
+    if lon_dir != "E" && lon_dir != "W" {
+        return Err(JsValue::from_str("Invalid longitude hemisphere"));
+    }
 
     let lat = parse_coord(lat_raw);
     let lat = if lat_dir == "S" { -lat } else { lat };
