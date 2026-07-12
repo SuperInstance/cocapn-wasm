@@ -75,7 +75,7 @@ pub struct PIDController {
     ki: f64,
     kd: f64,
     integral: f64,
-    last_error: f64,
+    last_error: Option<f64>,
     max_rudder: f64,
     heading_tol: f64,
 }
@@ -93,7 +93,7 @@ impl PIDController {
             ki,
             kd,
             integral: 0.0,
-            last_error: 0.0,
+            last_error: None,
             max_rudder,
             heading_tol: tol,
         }
@@ -110,11 +110,12 @@ impl PIDController {
         let i = self.ki * self.integral;
 
         let d = if dt > 0.0 {
-            self.kd * (err - self.last_error) / dt
+            self.last_error
+                .map_or(0.0, |last| self.kd * (err - last) / dt)
         } else {
             0.0
         };
-        self.last_error = err;
+        self.last_error = Some(err);
 
         let cmd = (p + i + d).clamp(-self.max_rudder, self.max_rudder);
         let on_course = err.abs() < self.heading_tol;
@@ -124,7 +125,7 @@ impl PIDController {
 
     pub fn reset(&mut self) {
         self.integral = 0.0;
-        self.last_error = 0.0;
+        self.last_error = None;
     }
 }
 
