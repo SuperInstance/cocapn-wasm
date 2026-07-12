@@ -112,13 +112,17 @@
                 const valid = verify_nmea_checksum(sentence);
                 let output = `Checksum: ${valid ? '✅ Valid' : '❌ Invalid'}\n`;
                 if (valid) {
-                    const data = parse_nmea_gga(sentence);
-                    output += `Latitude:  ${data[0].toFixed(4)}°\n`;
-                    output += `Longitude: ${data[1].toFixed(4)}°\n`;
-                    output += `Fix:       ${data[2]}\n`;
-                    output += `Satellites: ${data[3]}\n`;
-                    output += `HDOP:      ${data[4]}\n`;
-                    output += `Altitude:  ${data[5]}m\n`;
+                    try {
+                        const data = parse_nmea_gga(sentence);
+                        output += `Latitude:  ${data[0].toFixed(4)}°\n`;
+                        output += `Longitude: ${data[1].toFixed(4)}°\n`;
+                        output += `Fix:       ${data[2]}\n`;
+                        output += `Satellites: ${data[3]}\n`;
+                        output += `HDOP:      ${data[4]}\n`;
+                        output += `Altitude:  ${data[5]}m\n`;
+                    } catch (e) {
+                        output += `Parse error: ${e}\n`;
+                    }
                 }
                 document.getElementById('nmea-result').textContent = output;
             };
