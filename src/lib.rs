@@ -15,7 +15,11 @@ pub struct Deadband {
 impl Deadband {
     #[wasm_bindgen(constructor)]
     pub fn new(center: f64, tolerance: f64, direction: u8) -> Self {
-        Self { center, tolerance, direction }
+        Self {
+            center,
+            tolerance,
+            direction,
+        }
     }
 
     /// Returns 0=Normal, 1=Approaching, 2=Exceeded
@@ -30,22 +34,34 @@ impl Deadband {
         match self.direction {
             1 => {
                 // Above only
-                if diff > tol { 2 }
-                else if diff > tol * 0.8 { 1 }
-                else { 0 }
+                if diff > tol {
+                    2
+                } else if diff > tol * 0.8 {
+                    1
+                } else {
+                    0
+                }
             }
             2 => {
                 // Below only (conservation)
-                if diff < -tol { 2 }
-                else if diff < -tol * 0.8 { 1 }
-                else { 0 }
+                if diff < -tol {
+                    2
+                } else if diff < -tol * 0.8 {
+                    1
+                } else {
+                    0
+                }
             }
             _ => {
                 // Both
                 let adiff = diff.abs();
-                if adiff > tol { 2 }
-                else if adiff > tol * 0.8 { 1 }
-                else { 0 }
+                if adiff > tol {
+                    2
+                } else if adiff > tol * 0.8 {
+                    1
+                } else {
+                    0
+                }
             }
         }
     }
@@ -72,7 +88,15 @@ fn heading_error(current: f64, target: f64) -> f64 {
 impl PIDController {
     #[wasm_bindgen(constructor)]
     pub fn new(kp: f64, ki: f64, kd: f64, max_rudder: f64, tol: f64) -> Self {
-        Self { kp, ki, kd, integral: 0.0, last_error: 0.0, max_rudder, heading_tol: tol }
+        Self {
+            kp,
+            ki,
+            kd,
+            integral: 0.0,
+            last_error: 0.0,
+            max_rudder,
+            heading_tol: tol,
+        }
     }
 
     /// Returns [rudder_command, heading_error, on_course (1.0 or 0.0)]
@@ -85,7 +109,11 @@ impl PIDController {
         self.integral = self.integral.clamp(-self.max_rudder, self.max_rudder);
         let i = self.ki * self.integral;
 
-        let d = if dt > 0.0 { self.kd * (err - self.last_error) / dt } else { 0.0 };
+        let d = if dt > 0.0 {
+            self.kd * (err - self.last_error) / dt
+        } else {
+            0.0
+        };
         self.last_error = err;
 
         let cmd = (p + i + d).clamp(-self.max_rudder, self.max_rudder);
@@ -104,13 +132,19 @@ impl PIDController {
 
 #[wasm_bindgen]
 pub fn verify_nmea_checksum(sentence: &str) -> bool {
-    if !sentence.starts_with('$') { return false; }
+    if !sentence.starts_with('$') {
+        return false;
+    }
     let mut calc: u8 = 0;
     for ch in sentence[1..].chars() {
-        if ch == '*' { break; }
+        if ch == '*' {
+            break;
+        }
         calc ^= ch as u8;
     }
-    sentence.split('*').nth(1)
+    sentence
+        .split('*')
+        .nth(1)
         .and_then(|s| s.get(..2))
         .and_then(|s| u8::from_str_radix(s, 16).ok())
         .map(|stated| calc == stated)
@@ -157,7 +191,14 @@ pub fn heading_error_js(current: f64, target: f64) -> f64 {
 
 /// Simulate heading hold. Returns flat array: [h0, e0, r0, h1, e1, r1, ...]
 #[wasm_bindgen]
-pub fn simulate_heading_hold(kp: f64, ki: f64, kd: f64, initial: f64, target: f64, steps: usize) -> Vec<f64> {
+pub fn simulate_heading_hold(
+    kp: f64,
+    ki: f64,
+    kd: f64,
+    initial: f64,
+    target: f64,
+    steps: usize,
+) -> Vec<f64> {
     let mut pid = PIDController::new(kp, ki, kd, 15.0, 2.0);
     let mut heading = initial;
     let mut result = Vec::with_capacity(steps * 3);
@@ -174,7 +215,9 @@ pub fn simulate_heading_hold(kp: f64, ki: f64, kd: f64, initial: f64, target: f6
         result.push(cmd);
 
         heading = (heading + cmd * dt + 3600.0) % 360.0;
-        if on_course { break; }
+        if on_course {
+            break;
+        }
     }
     result
 }
@@ -212,7 +255,9 @@ mod tests {
         for _ in 0..200 {
             let r = pid.update(h, 90.0, 0.1);
             h = (h + r[0] * 0.1 + 360.0) % 360.0;
-            if r[2] > 0.5 { break; }
+            if r[2] > 0.5 {
+                break;
+            }
         }
         assert!(heading_error(h, 90.0).abs() < 2.0);
     }
