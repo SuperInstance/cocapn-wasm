@@ -31,7 +31,9 @@ import init, { Deadband, PIDController, verify_nmea_checksum, parse_nmea_gga, si
 await init();
 
 // Deadband
-const db = new Deadband(100.0, 0.05, 0);  // center, tolerance, direction (0=both,1=above,2=below)
+// center, tolerance, direction (0=both,1=above,2=below)
+// Tolerance is absolute when center is near zero, otherwise relative to center.
+const db = new Deadband(100.0, 0.05, 0);
 db.check(97.0);   // 0 = NORMAL
 db.check(106.0);  // 2 = EXCEEDED
 
@@ -41,6 +43,7 @@ const [rudder, error, onCourse] = pid.update(currentHeading, targetHeading, dt);
 
 // NMEA
 verify_nmea_checksum("$GPGGA,...*47");  // true/false
+// parse_nmea_gga validates the checksum and hemisphere letters internally.
 const [lat, lon, quality, sats, hdop, alt] = parse_nmea_gga(sentence);
 
 // Simulation
@@ -50,7 +53,7 @@ const data = simulate_heading_hold(0.8, 0.1, 0.3, 0, 90, 300);
 
 ## Size
 
-Compiled with `opt-level = "z"` and LTO. Target: < 20KB gzipped.
+Compiled with `opt-level = "z"` and LTO. The `.wasm` is currently ~75KB raw and ~42KB gzipped; the < 20KB target is still a size-optimization goal, not the current measured output.
 
 ## Tests
 
@@ -58,7 +61,7 @@ Compiled with `opt-level = "z"` and LTO. Target: < 20KB gzipped.
 cargo test
 ```
 
-7 tests: deadband (normal, exceeded, conservation), PID convergence, NMEA checksum + parsing, heading wrap.
+17 tests covering deadband (normal, exceeded, approaching, above-only, conservation, zero-center absolute tolerance), PID convergence and first-update/reset behavior, NMEA checksum/parse and their error paths, and heading wrap including the antipodal edge case.
 
 ## License
 
